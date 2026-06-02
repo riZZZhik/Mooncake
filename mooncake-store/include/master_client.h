@@ -52,23 +52,12 @@ inline void MaybeEnableRdmaSocketConfig(SocketConfigVariant& socket_config) {
 class MasterClient {
    public:
     MasterClient(const UUID& client_id, MasterClientMetric* metrics = nullptr)
-        : client_id_(client_id), metrics_(metrics) {
-        coro_io::client_pool<coro_rpc::coro_rpc_client>::pool_config
-            pool_conf{};
-
-        // Disable alive_detect to prevent stale reconnection logs after HA
-        // failover. Old client_pool objects remain in client_pools_ map and
-        // would otherwise continue probing failed addresses indefinitely. See
-        // PR #1642.
-        pool_conf.host_alive_detect_duration = std::chrono::seconds(0);
-        const char* value = std::getenv("MC_RPC_PROTOCOL");
-        if (value && std::string_view(value) == "rdma") {
-            detail::MaybeEnableRdmaSocketConfig(
-                pool_conf.client_config.socket_config);
-        }
+        : client_id_(client_id),
+          metrics_(metrics),
+          pool_conf_(MakePoolConfig()) {
         client_pools_ =
             std::make_shared<coro_io::client_pools<coro_rpc::coro_rpc_client>>(
-                pool_conf);
+                pool_conf_);
     }
     ~MasterClient();
 
@@ -78,10 +67,15 @@ class MasterClient {
     /**
      * @brief Connects to the master service
      * @param master_addr Master service address (IP:Port)
+     * @param force_recreate_pool If true, build a fresh underlying RPC client
+     * pool even when @p master_addr is unchanged. Used by the heartbeat
+     * reconnect path so that wedged sockets from a prior network/RDMA outage
+     * are dropped instead of being reused.
      * @return ErrorCode indicating success/failure
      */
     [[nodiscard]] ErrorCode Connect(
-        const std::string& master_addr = kDefaultMasterAddress);
+        const std::string& master_addr = kDefaultMasterAddress,
+        bool force_recreate_pool = false);
 
     /**
      * @brief Checks if an object exists
@@ -541,6 +535,14 @@ class MasterClient {
 
     // Metrics for tracking RPC operations
     MasterClientMetric* metrics_;
+
+    // Pool configuration used for both the cached client_pools_ map and any
+    // standalone pools created on demand by Connect(force_recreate_pool=true).
+    static coro_io::client_pool<coro_rpc::coro_rpc_client>::pool_config
+    MakePoolConfig();
+    const coro_io::client_pool<coro_rpc::coro_rpc_client>::pool_config
+        pool_conf_;
+
     std::shared_ptr<coro_io::client_pools<coro_rpc::coro_rpc_client>>
         client_pools_;
 

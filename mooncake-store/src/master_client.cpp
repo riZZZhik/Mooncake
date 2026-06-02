@@ -346,15 +346,46 @@ std::vector<tl::expected<ResultType, ErrorCode>> MasterClient::invoke_batch_rpc(
 
 MasterClient::~MasterClient() = default;
 
-ErrorCode MasterClient::Connect(const std::string& master_addr) {
+coro_io::client_pool<coro_rpc::coro_rpc_client>::pool_config
+MasterClient::MakePoolConfig() {
+    coro_io::client_pool<coro_rpc::coro_rpc_client>::pool_config pool_conf{};
+
+    // Disable alive_detect to prevent stale reconnection logs after HA
+    // failover. Old client_pool objects remain in client_pools_ map and
+    // would otherwise continue probing failed addresses indefinitely. See
+    // PR #1642.
+    pool_conf.host_alive_detect_duration = std::chrono::seconds(0);
+    const char* value = std::getenv("MC_RPC_PROTOCOL");
+    if (value && std::string_view(value) == "rdma") {
+        detail::MaybeEnableRdmaSocketConfig(
+            pool_conf.client_config.socket_config);
+    }
+    return pool_conf;
+}
+
+ErrorCode MasterClient::Connect(const std::string& master_addr,
+                                bool force_recreate_pool) {
     ScopedVLogTimer timer(1, "MasterClient::Connect");
-    timer.LogRequest("master_addr=", master_addr);
+    timer.LogRequest("master_addr=", master_addr,
+                     ", force_recreate_pool=", force_recreate_pool);
 
     MutexLocker lock(&connect_mutex_);
-    if (client_addr_param_ != master_addr) {
-        // WARNING: The existing client pool cannot be erased. So if there are a
-        // lot of different addresses, there will be resource leak problems.
-        auto client_pool = client_pools_->at(master_addr);
+    if (force_recreate_pool || client_addr_param_ != master_addr) {
+        std::shared_ptr<coro_io::client_pool<coro_rpc::coro_rpc_client>>
+            client_pool;
+        if (force_recreate_pool) {
+            // Build a standalone pool that bypasses client_pools_ so wedged
+            // sockets in the cached pool are dropped. The prior pool's
+            // shared_ptr is released once outstanding callers return.
+            client_pool =
+                coro_io::client_pool<coro_rpc::coro_rpc_client>::create(
+                    master_addr, pool_conf_);
+        } else {
+            // WARNING: The existing client pool cannot be erased. So if there
+            // are a lot of different addresses, there will be resource leak
+            // problems.
+            client_pool = client_pools_->at(master_addr);
+        }
         client_accessor_.SetClientPool(client_pool);
         client_addr_param_ = master_addr;
     }

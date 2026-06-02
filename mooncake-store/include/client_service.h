@@ -711,7 +711,8 @@ class Client {
     std::thread task_poll_thread_;
     std::atomic<bool> task_poll_running_{false};
     std::atomic<bool> last_ping_success_{false};
-    ErrorCode SwitchLeader(const ha::MasterView& target_view);
+    ErrorCode SwitchLeader(const ha::MasterView& target_view,
+                           bool force_recreate_pool = false);
     void LeaderMonitorThreadMain();
     void StorageHeartbeatThreadMain();
     void TaskPollThreadMain();

@@ -286,7 +286,8 @@ ErrorCode Client::ConnectToMaster(const std::string& master_server_entry) {
     }
 }
 
-ErrorCode Client::SwitchLeader(const ha::MasterView& target_view) {
+ErrorCode Client::SwitchLeader(const ha::MasterView& target_view,
+                               bool force_recreate_pool) {
     std::lock_guard<std::mutex> lock(leader_switch_mutex_);
 
     if (current_master_view_.has_value()) {
@@ -302,7 +303,8 @@ ErrorCode Client::SwitchLeader(const ha::MasterView& target_view) {
         }
     }
 
-    auto err = master_client_.Connect(target_view.leader_address);
+    auto err =
+        master_client_.Connect(target_view.leader_address, force_recreate_pool);
     if (err != ErrorCode::OK) {
         last_ping_success_.store(false);
         return err;
@@ -2829,6 +2831,13 @@ void Client::StorageHeartbeatThreadMain() {
     const int fail_ping_interval_ms = 1000;
     // Increment after a ping failure, reset after a ping success
     int ping_fail_count = 0;
+    // Set after a successful reconnect so the heartbeat loop re-registers
+    // (ReMountSegment) without waiting for a successful Ping to return
+    // NEED_REMOUNT. After a long enough outage the master has almost certainly
+    // already expired this client, and ReMountSegment is idempotent on the
+    // master side, so the extra call is a cheap no-op in the rare case where
+    // the master still considers us OK.
+    bool force_remount_after_reconnect = false;
 
     auto remount_segment = [this]() {
         // This lock must be held until the remount rpc is finished,
@@ -2859,6 +2868,16 @@ void Client::StorageHeartbeatThreadMain() {
             remount_segment_future = std::future<void>();
         }
 
+        // If we just reconnected, proactively kick off ReMountSegment instead
+        // of waiting for a Ping response to tell us NEED_REMOUNT. Ping may
+        // itself be slow while the RPC pool is still settling.
+        if (force_remount_after_reconnect &&
+            !remount_segment_future.valid()) {
+            remount_segment_future =
+                std::async(std::launch::async, remount_segment);
+            force_remount_after_reconnect = false;
+        }
+
         // Ping master
         auto ping_result = master_client_.Ping();
         if (ping_result) {
@@ -2887,7 +2906,11 @@ void Client::StorageHeartbeatThreadMain() {
             continue;
         }
 
-        // Exceeded ping failure threshold. Reconnect based on mode.
+        // Exceeded ping failure threshold. Reconnect based on mode. Both paths
+        // request a fresh RPC client pool: the existing pool's sockets may be
+        // wedged after an RDMA / network outage, and the underlying
+        // coro_rpc client_pool does not refresh its connections on its own
+        // (host_alive_detect is disabled — see master_client.h).
         if (leader_coordinator_) {
             LOG(ERROR)
                 << "Failed to ping master for " << ping_fail_count
@@ -2908,7 +2931,7 @@ void Client::StorageHeartbeatThreadMain() {
             }
 
             const auto& next_view = current_view.value().value();
-            auto err = SwitchLeader(next_view);
+            auto err = SwitchLeader(next_view, /*force_recreate_pool=*/true);
             if (err != ErrorCode::OK) {
                 LOG(ERROR) << "Failed to connect to master "
                            << next_view.leader_address << ": " << toString(err);
@@ -2919,12 +2942,14 @@ void Client::StorageHeartbeatThreadMain() {
 
             LOG(INFO) << "Reconnected to master " << next_view.leader_address;
             ping_fail_count = 0;
+            force_remount_after_reconnect = true;
         } else {
             const std::string current_master_address = direct_master_address_;
             LOG(ERROR) << "Failed to ping master for " << ping_fail_count
                        << " times (non-HA); reconnecting to "
                        << current_master_address;
-            auto err = master_client_.Connect(current_master_address);
+            auto err = master_client_.Connect(current_master_address,
+                                              /*force_recreate_pool=*/true);
             if (err != ErrorCode::OK) {
                 LOG(ERROR) << "Reconnect failed to " << current_master_address
                            << ": " << toString(err);
@@ -2935,6 +2960,7 @@ void Client::StorageHeartbeatThreadMain() {
             LOG(INFO) << "Reconnected to master " << current_master_address;
             last_ping_success_.store(true);
             ping_fail_count = 0;
+            force_remount_after_reconnect = true;
         }
     }
     // Explicitly wait for the remount segment thread to finish
