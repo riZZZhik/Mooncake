@@ -10,11 +10,11 @@
 #include <ylt/coro_rpc/impl/coro_rpc_client.hpp>
 #include <ylt/util/tl/expected.hpp>
 
+#include "master_metric_manager.h"
 #include "mutex.h"
 #include "rpc_service.h"
 #include "types.h"
 #include "utils/scoped_vlog_timer.h"
-#include "master_metric_manager.h"
 #include "version.h"
 
 namespace mooncake {
@@ -417,6 +417,12 @@ ErrorCode MasterClient::Connect(const std::string& master_addr) {
         auto client_pool = client_pools_->at(master_addr);
         client_accessor_.SetClientPool(client_pool);
         client_addr_param_ = master_addr;
+    } else {
+        // Same-address reconnect (non-HA recovery).
+        client_pools_ =
+            std::make_shared<coro_io::client_pools<coro_rpc::coro_rpc_client>>(
+                pool_conf_);
+        client_accessor_.SetClientPool(client_pools_->at(master_addr));
     }
     auto pool = client_accessor_.GetClientPool();
     // The client pool does not have native connection check method, so we need
