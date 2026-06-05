@@ -10,11 +10,11 @@
 #include <ylt/coro_rpc/impl/coro_rpc_client.hpp>
 #include <ylt/util/tl/expected.hpp>
 
-#include "master_metric_manager.h"
 #include "mutex.h"
 #include "rpc_service.h"
 #include "types.h"
 #include "utils/scoped_vlog_timer.h"
+#include "master_metric_manager.h"
 #include "version.h"
 
 namespace mooncake {

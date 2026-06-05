@@ -16,9 +16,9 @@
 
 #include <json/value.h>
 
-#include <algorithm>
 #include <cassert>
 #include <set>
+#include <algorithm>
 
 #include "common.h"
 #include "config.h"
@@ -28,7 +28,7 @@
 namespace mooncake {
 #ifdef ENABLE_MULTI_PROTOCOL
 // Split comma-separated protocol string into vector
-static std::vector<std::string> splitProtocols(const std::string& protocols) {
+static std::vector<std::string> splitProtocols(const std::string &protocols) {
     std::vector<std::string> result;
     std::stringstream ss(protocols);
     std::string item;
@@ -40,7 +40,7 @@ static std::vector<std::string> splitProtocols(const std::string& protocols) {
 #endif
 
 static inline std::string extractProtocolFromConnString(
-    const std::string& conn_string) {
+    const std::string &conn_string) {
     std::size_t pos = conn_string.find("://");
     if (pos != std::string::npos) {
         return conn_string.substr(0, pos);
@@ -49,14 +49,14 @@ static inline std::string extractProtocolFromConnString(
 }
 
 struct TransferNotifyUtil {
-    static Json::Value encode(const TransferMetadata::NotifyDesc& desc) {
+    static Json::Value encode(const TransferMetadata::NotifyDesc &desc) {
         Json::Value root;
         root["name"] = desc.name;
         root["notify_msg"] = desc.notify_msg;
         return root;
     }
 
-    static int decode(Json::Value root, TransferMetadata::NotifyDesc& desc) {
+    static int decode(Json::Value root, TransferMetadata::NotifyDesc &desc) {
         desc.name = root["name"].asString();
         desc.notify_msg = root["notify_msg"].asString();
         return 0;
@@ -64,7 +64,7 @@ struct TransferNotifyUtil {
 };
 
 struct TransferHandshakeUtil {
-    static Json::Value encode(const TransferMetadata::HandShakeDesc& desc) {
+    static Json::Value encode(const TransferMetadata::HandShakeDesc &desc) {
         Json::Value root;
         root["local_nic_path"] = desc.local_nic_path;
         root["local_lid"] = desc.local_lid;
@@ -74,7 +74,7 @@ struct TransferHandshakeUtil {
         root["barex_port"] = desc.barex_port;
 #endif
         Json::Value qpNums(Json::arrayValue);
-        for (const auto& qp : desc.qp_num) qpNums.append(qp);
+        for (const auto &qp : desc.qp_num) qpNums.append(qp);
         root["qp_num"] = qpNums;
         root["reply_msg"] = desc.reply_msg;
 #ifdef USE_EFA
@@ -83,7 +83,7 @@ struct TransferHandshakeUtil {
 
 #ifdef USE_UB
         Json::Value jettyNums(Json::arrayValue);
-        for (const auto& jetty : desc.jetty_num) jettyNums.append(jetty);
+        for (const auto &jetty : desc.jetty_num) jettyNums.append(jetty);
         root["jetty_num"] = jettyNums;
         LOG(INFO) << "Encode: local_nic_path is " << desc.local_nic_path
                   << " peer_nic_path is " << desc.peer_nic_path
@@ -92,7 +92,7 @@ struct TransferHandshakeUtil {
         return root;
     }
 
-    static int decode(Json::Value root, TransferMetadata::HandShakeDesc& desc) {
+    static int decode(Json::Value root, TransferMetadata::HandShakeDesc &desc) {
         desc.local_nic_path = root["local_nic_path"].asString();
         if (root.isMember("local_lid") && root["local_lid"].isUInt()) {
             desc.local_lid = root["local_lid"].asUInt();
@@ -108,7 +108,7 @@ struct TransferHandshakeUtil {
 #ifdef USE_BAREX
         desc.barex_port = root["barex_port"].asInt();
 #endif
-        for (const auto& qp : root["qp_num"])
+        for (const auto &qp : root["qp_num"])
             desc.qp_num.push_back(qp.asUInt());
         desc.reply_msg = root["reply_msg"].asString();
 #ifdef USE_EFA
@@ -116,7 +116,7 @@ struct TransferHandshakeUtil {
 #endif
 
 #ifdef USE_UB
-        for (const auto& jetty : root["jetty_num"]) {
+        for (const auto &jetty : root["jetty_num"]) {
             desc.jetty_num.push_back(jetty.asUInt());
         }
         LOG(INFO) << "Decode: remote_nic_path is " << desc.local_nic_path
@@ -127,13 +127,13 @@ struct TransferHandshakeUtil {
     }
 };
 
-TransferMetadata::TransferMetadata(const std::string& conn_string) {
+TransferMetadata::TransferMetadata(const std::string &conn_string) {
     next_segment_id_.store(1);
 
     std::string protocol = extractProtocolFromConnString(conn_string);
     std::string custom_key;
 
-    const char* custom_prefix = std::getenv("MC_METADATA_CLUSTER_ID");
+    const char *custom_prefix = std::getenv("MC_METADATA_CLUSTER_ID");
     if (custom_prefix != nullptr && strlen(custom_prefix) > 0) {
         custom_key = custom_prefix;
 
@@ -167,7 +167,7 @@ TransferMetadata::TransferMetadata(const std::string& conn_string) {
 TransferMetadata::~TransferMetadata() { handshake_plugin_.reset(); }
 
 std::string TransferMetadata::getFullMetadataKey(
-    const std::string& segment_name) const {
+    const std::string &segment_name) const {
     if (segment_name.empty()) {
         LOG(WARNING) << "Empty segment_name provided to getFullMetadataKey";
         return common_key_prefix_ + "ram/";
@@ -183,8 +183,8 @@ std::string TransferMetadata::getFullMetadataKey(
     }
 }
 
-int TransferMetadata::receivePeerNotify(const Json::Value& peer_json,
-                                        Json::Value& local_json) {
+int TransferMetadata::receivePeerNotify(const Json::Value &peer_json,
+                                        Json::Value &local_json) {
     RWSpinlock::WriteGuard guard(notify_lock_);
     TransferMetadata::NotifyDesc peer_notify, local_reply;
     TransferNotifyUtil::decode(peer_json, peer_notify);
@@ -196,15 +196,15 @@ int TransferMetadata::receivePeerNotify(const Json::Value& peer_json,
     return 0;
 }
 
-int TransferMetadata::receivePeerProbe(const Json::Value& peer_json,
-                                       Json::Value& local_json) {
+int TransferMetadata::receivePeerProbe(const Json::Value &peer_json,
+                                       Json::Value &local_json) {
     (void)peer_json;
     local_json = Json::Value(Json::objectValue);
     local_json["status"] = "success";
     return 0;
 }
 
-int TransferMetadata::getNotifies(std::vector<NotifyDesc>& notifies) {
+int TransferMetadata::getNotifies(std::vector<NotifyDesc> &notifies) {
     RWSpinlock::WriteGuard guard(notify_lock_);
     if (notifys.size() > 0) {
         std::move(notifys.begin(), notifys.end(), std::back_inserter(notifies));
@@ -215,18 +215,18 @@ int TransferMetadata::getNotifies(std::vector<NotifyDesc>& notifies) {
 
 #ifdef ENABLE_MULTI_PROTOCOL
 static int encodeMultiProtocolSegmentDesc(
-    const std::vector<std::string>& protocols,
-    const TransferMetadata::SegmentDesc& desc, Json::Value& segmentJSON) {
+    const std::vector<std::string> &protocols,
+    const TransferMetadata::SegmentDesc &desc, Json::Value &segmentJSON) {
     // Multi-protocol encoding for CXL+TCP or CXL+RDMA combination
     segmentJSON["name"] = desc.name;
     if (!desc.rdma_server_name.empty()) {
         segmentJSON["rdma_server_name"] = desc.rdma_server_name;
     }
     Json::Value protocolJSON(Json::arrayValue);
-    for (const auto& proto : protocols) {
+    for (const auto &proto : protocols) {
         if (proto == "rdma") {
             Json::Value devicesJSON(Json::arrayValue);
-            for (const auto& device : desc.devices) {
+            for (const auto &device : desc.devices) {
                 Json::Value deviceJSON;
                 deviceJSON["name"] = device.name;
                 deviceJSON["lid"] = device.lid;
@@ -244,7 +244,7 @@ static int encodeMultiProtocolSegmentDesc(
     }
 
     Json::Value buffersJSON(Json::arrayValue);
-    for (const auto& buffer : desc.buffers) {
+    for (const auto &buffer : desc.buffers) {
         Json::Value bufferJSON;
         bufferJSON["name"] = buffer.name;
         bufferJSON["length"] = static_cast<Json::UInt64>(buffer.length);
@@ -255,10 +255,10 @@ static int encodeMultiProtocolSegmentDesc(
         } else if (buffer.protocol == "rdma") {
             bufferJSON["addr"] = static_cast<Json::UInt64>(buffer.addr);
             Json::Value rkeyJSON(Json::arrayValue);
-            for (auto& entry : buffer.rkey) rkeyJSON.append(entry);
+            for (auto &entry : buffer.rkey) rkeyJSON.append(entry);
             bufferJSON["rkey"] = rkeyJSON;
             Json::Value lkeyJSON(Json::arrayValue);
-            for (auto& entry : buffer.lkey) lkeyJSON.append(entry);
+            for (auto &entry : buffer.lkey) lkeyJSON.append(entry);
             bufferJSON["lkey"] = lkeyJSON;
         } else if (buffer.protocol == "tcp") {
             bufferJSON["addr"] = static_cast<Json::UInt64>(buffer.addr);
@@ -274,8 +274,8 @@ static int encodeMultiProtocolSegmentDesc(
 }
 #endif
 
-int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
-                                        Json::Value& segmentJSON) {
+int TransferMetadata::encodeSegmentDesc(const SegmentDesc &desc,
+                                        Json::Value &segmentJSON) {
 #ifdef ENABLE_MULTI_PROTOCOL
     // Check if this is a multi-protocol scenario (CXL+TCP or CXL+RDMA)
     std::vector<std::string> protocols = splitProtocols(desc.protocol);
@@ -283,7 +283,7 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
     if (protocols.size() == 2) {
         // Only support CXL+TCP or CXL+RDMA combinations
         bool has_cxl = false, has_tcp = false, has_rdma = false;
-        for (const auto& proto : protocols) {
+        for (const auto &proto : protocols) {
             if (proto == "cxl")
                 has_cxl = true;
             else if (proto == "tcp")
@@ -326,7 +326,7 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
         segmentJSON["protocol"] == "barex" ||
         segmentJSON["protocol"] == "efa") {
         Json::Value devicesJSON(Json::arrayValue);
-        for (const auto& device : desc.devices) {
+        for (const auto &device : desc.devices) {
             Json::Value deviceJSON;
             deviceJSON["name"] = device.name;
             deviceJSON["lid"] = device.lid;
@@ -336,16 +336,16 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
         segmentJSON["devices"] = devicesJSON;
 
         Json::Value buffersJSON(Json::arrayValue);
-        for (const auto& buffer : desc.buffers) {
+        for (const auto &buffer : desc.buffers) {
             Json::Value bufferJSON;
             bufferJSON["name"] = buffer.name;
             bufferJSON["addr"] = static_cast<Json::UInt64>(buffer.addr);
             bufferJSON["length"] = static_cast<Json::UInt64>(buffer.length);
             Json::Value rkeyJSON(Json::arrayValue);
-            for (auto& entry : buffer.rkey) rkeyJSON.append(entry);
+            for (auto &entry : buffer.rkey) rkeyJSON.append(entry);
             bufferJSON["rkey"] = rkeyJSON;
             Json::Value lkeyJSON(Json::arrayValue);
-            for (auto& entry : buffer.lkey) lkeyJSON.append(entry);
+            for (auto &entry : buffer.lkey) lkeyJSON.append(entry);
             bufferJSON["lkey"] = lkeyJSON;
             buffersJSON.append(bufferJSON);
         }
@@ -353,7 +353,7 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
         segmentJSON["priority_matrix"] = desc.topology.toJson();
     } else if (segmentJSON["protocol"] == "ub") {
         Json::Value devicesJSON(Json::arrayValue);
-        for (const auto& device : desc.devices) {
+        for (const auto &device : desc.devices) {
             Json::Value deviceJSON;
             deviceJSON["name"] = device.name;
             deviceJSON["eid"] = device.eid;
@@ -362,13 +362,13 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
         segmentJSON["devices"] = devicesJSON;
 
         Json::Value buffersJSON(Json::arrayValue);
-        for (const auto& buffer : desc.buffers) {
+        for (const auto &buffer : desc.buffers) {
             Json::Value bufferJSON;
             bufferJSON["name"] = buffer.name;
             bufferJSON["addr"] = static_cast<Json::UInt64>(buffer.addr);
             bufferJSON["length"] = static_cast<Json::UInt64>(buffer.length);
             Json::Value tsegJSON(Json::arrayValue);
-            for (auto& entry : buffer.tseg) tsegJSON.append(entry);
+            for (auto &entry : buffer.tseg) tsegJSON.append(entry);
             bufferJSON["tseg"] = tsegJSON;
             buffersJSON.append(bufferJSON);
         }
@@ -376,7 +376,7 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
         segmentJSON["priority_matrix"] = desc.topology.toJson();
     } else if (segmentJSON["protocol"] == "tcp") {
         Json::Value buffersJSON(Json::arrayValue);
-        for (const auto& buffer : desc.buffers) {
+        for (const auto &buffer : desc.buffers) {
             Json::Value bufferJSON;
             bufferJSON["name"] = buffer.name;
             bufferJSON["addr"] = static_cast<Json::UInt64>(buffer.addr);
@@ -386,7 +386,7 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
         segmentJSON["buffers"] = buffersJSON;
     } else if (segmentJSON["protocol"] == "ascend") {
         Json::Value devicesJSON(Json::arrayValue);
-        for (const auto& device : desc.devices) {
+        for (const auto &device : desc.devices) {
             Json::Value deviceJSON;
             deviceJSON["name"] = device.name;
             deviceJSON["lid"] = device.lid;
@@ -394,7 +394,7 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
         }
         segmentJSON["devices"] = devicesJSON;
         Json::Value buffersJSON(Json::arrayValue);
-        for (const auto& buffer : desc.buffers) {
+        for (const auto &buffer : desc.buffers) {
             Json::Value bufferJSON;
             bufferJSON["name"] = buffer.name;
             bufferJSON["addr"] = static_cast<Json::UInt64>(buffer.addr);
@@ -420,7 +420,7 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
             static_cast<Json::UInt64>(desc.rank_info.devicePort);
         rankInfoJSON["pid"] = static_cast<Json::UInt64>(desc.rank_info.pid);
         Json::Value endpointsJSON(Json::arrayValue);
-        for (const auto& endpoint : desc.rank_info.endpoints) {
+        for (const auto &endpoint : desc.rank_info.endpoints) {
             endpointsJSON.append(endpoint);
         }
         rankInfoJSON["endpoints"] = endpointsJSON;
@@ -432,7 +432,7 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
                segmentJSON["protocol"] == "maca" ||
                segmentJSON["protocol"] == "ubshmem") {
         Json::Value buffersJSON(Json::arrayValue);
-        for (const auto& buffer : desc.buffers) {
+        for (const auto &buffer : desc.buffers) {
             Json::Value bufferJSON;
             bufferJSON["name"] = buffer.name;
             bufferJSON["addr"] = static_cast<Json::UInt64>(buffer.addr);
@@ -446,7 +446,7 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
         segmentJSON["cxl_base_addr"] =
             static_cast<Json::UInt64>(desc.cxl_base_addr);
         Json::Value buffersJSON(Json::arrayValue);
-        for (const auto& buffer : desc.buffers) {
+        for (const auto &buffer : desc.buffers) {
             Json::Value bufferJSON;
             bufferJSON["name"] = buffer.name;
             bufferJSON["offset"] = static_cast<Json::UInt64>(buffer.offset);
@@ -462,8 +462,8 @@ int TransferMetadata::encodeSegmentDesc(const SegmentDesc& desc,
     return 0;
 }
 
-int TransferMetadata::updateSegmentDesc(const std::string& segment_name,
-                                        const SegmentDesc& desc) {
+int TransferMetadata::updateSegmentDesc(const std::string &segment_name,
+                                        const SegmentDesc &desc) {
     if (p2p_handshake_mode_) {
         return 0;
     }
@@ -483,7 +483,7 @@ int TransferMetadata::updateSegmentDesc(const std::string& segment_name,
     return 0;
 }
 
-int TransferMetadata::removeSegmentDesc(const std::string& segment_name) {
+int TransferMetadata::removeSegmentDesc(const std::string &segment_name) {
     if (p2p_handshake_mode_) {
         RWSpinlock::WriteGuard guard(segment_lock_);
         auto iter = segment_name_to_id_map_.find(segment_name);
@@ -507,8 +507,8 @@ int TransferMetadata::removeSegmentDesc(const std::string& segment_name) {
 
 #ifdef ENABLE_MULTI_PROTOCOL
 static std::shared_ptr<TransferMetadata::SegmentDesc>
-decodeMultiProtocolSegmentDesc(Json::Value& segmentJSON,
-                               const std::string& segment_name) {
+decodeMultiProtocolSegmentDesc(Json::Value &segmentJSON,
+                               const std::string &segment_name) {
     auto desc = std::make_shared<TransferMetadata::SegmentDesc>();
     desc->name = segmentJSON["name"].asString();
     desc->tcp_data_port = segmentJSON["tcp_data_port"].asInt();
@@ -517,14 +517,14 @@ decodeMultiProtocolSegmentDesc(Json::Value& segmentJSON,
     if (segmentJSON.isMember("rdma_server_name"))
         desc->rdma_server_name = segmentJSON["rdma_server_name"].asString();
 
-    for (const auto& protocolStr : segmentJSON["protocol"]) {
+    for (const auto &protocolStr : segmentJSON["protocol"]) {
         std::string proto = protocolStr.asString();
         if (!desc->protocol.empty()) desc->protocol += ",";
         desc->protocol += proto;
 
         if (proto == "rdma") {
             if (desc->devices.empty()) {
-                for (const auto& deviceJSON : segmentJSON["devices"]) {
+                for (const auto &deviceJSON : segmentJSON["devices"]) {
                     TransferMetadata::DeviceDesc device;
                     device.name = deviceJSON["name"].asString();
                     device.lid = deviceJSON["lid"].asUInt();
@@ -550,7 +550,7 @@ decodeMultiProtocolSegmentDesc(Json::Value& segmentJSON,
         }
     }
 
-    for (const auto& bufferJSON : segmentJSON["buffers"]) {
+    for (const auto &bufferJSON : segmentJSON["buffers"]) {
         std::string buffer_protocol = bufferJSON["protocol"].asString();
 
         if (buffer_protocol == "cxl") {
@@ -572,9 +572,9 @@ decodeMultiProtocolSegmentDesc(Json::Value& segmentJSON,
             buffer.addr = bufferJSON["addr"].asUInt64();
             buffer.length = bufferJSON["length"].asUInt64();
             buffer.protocol = buffer_protocol;
-            for (const auto& rkeyJSON : bufferJSON["rkey"])
+            for (const auto &rkeyJSON : bufferJSON["rkey"])
                 buffer.rkey.push_back(rkeyJSON.asUInt());
-            for (const auto& lkeyJSON : bufferJSON["lkey"])
+            for (const auto &lkeyJSON : bufferJSON["lkey"])
                 buffer.lkey.push_back(lkeyJSON.asUInt());
             if (buffer.name.empty() || !buffer.addr || !buffer.length ||
                 buffer.rkey.empty() ||
@@ -609,8 +609,8 @@ decodeMultiProtocolSegmentDesc(Json::Value& segmentJSON,
 #endif
 
 std::shared_ptr<TransferMetadata::SegmentDesc>
-TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
-                                    const std::string& segment_name) {
+TransferMetadata::decodeSegmentDesc(Json::Value &segmentJSON,
+                                    const std::string &segment_name) {
 #ifdef ENABLE_MULTI_PROTOCOL
     // Check if this is a multi-protocol scenario (CXL+TCP or CXL+RDMA)
     bool is_multi_protocol = false;
@@ -619,7 +619,7 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
         if (proto_count == 2) {
             // Only support CXL+TCP or CXL+RDMA combinations
             bool has_cxl = false, has_tcp = false, has_rdma = false;
-            for (const auto& protocolStr : segmentJSON["protocol"]) {
+            for (const auto &protocolStr : segmentJSON["protocol"]) {
                 std::string proto = protocolStr.asString();
                 if (proto == "cxl")
                     has_cxl = true;
@@ -664,7 +664,7 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
 
     if (desc->protocol == "rdma" || desc->protocol == "barex" ||
         desc->protocol == "efa") {
-        for (const auto& deviceJSON : segmentJSON["devices"]) {
+        for (const auto &deviceJSON : segmentJSON["devices"]) {
             DeviceDesc device;
             device.name = deviceJSON["name"].asString();
             device.lid = deviceJSON["lid"].asUInt();
@@ -677,14 +677,14 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
             desc->devices.push_back(device);
         }
 
-        for (const auto& bufferJSON : segmentJSON["buffers"]) {
+        for (const auto &bufferJSON : segmentJSON["buffers"]) {
             BufferDesc buffer;
             buffer.name = bufferJSON["name"].asString();
             buffer.addr = bufferJSON["addr"].asUInt64();
             buffer.length = bufferJSON["length"].asUInt64();
-            for (const auto& rkeyJSON : bufferJSON["rkey"])
+            for (const auto &rkeyJSON : bufferJSON["rkey"])
                 buffer.rkey.push_back(rkeyJSON.asUInt());
-            for (const auto& lkeyJSON : bufferJSON["lkey"])
+            for (const auto &lkeyJSON : bufferJSON["lkey"])
                 buffer.lkey.push_back(lkeyJSON.asUInt());
             if (buffer.name.empty() || !buffer.addr || !buffer.length ||
                 buffer.rkey.empty() ||
@@ -706,7 +706,7 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
                          << segment_name << " protocol " << desc->protocol;
         }
     } else if (desc->protocol == "ub") {
-        for (const auto& deviceJSON : segmentJSON["devices"]) {
+        for (const auto &deviceJSON : segmentJSON["devices"]) {
             DeviceDesc device;
             device.name = deviceJSON["name"].asString();
             device.eid = deviceJSON["eid"].asString();
@@ -718,12 +718,12 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
             desc->devices.push_back(device);
         }
 
-        for (const auto& bufferJSON : segmentJSON["buffers"]) {
+        for (const auto &bufferJSON : segmentJSON["buffers"]) {
             BufferDesc buffer;
             buffer.name = bufferJSON["name"].asString();
             buffer.addr = bufferJSON["addr"].asUInt64();
             buffer.length = bufferJSON["length"].asUInt64();
-            for (const auto& tsegJSON : bufferJSON["tseg"]) {
+            for (const auto &tsegJSON : bufferJSON["tseg"]) {
                 buffer.tseg.push_back(tsegJSON.asString());
             }
             if (buffer.name.empty() || !buffer.addr || !buffer.length ||
@@ -742,7 +742,7 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
                          << segment_name << " protocol " << desc->protocol;
         }
     } else if (desc->protocol == "tcp") {
-        for (const auto& bufferJSON : segmentJSON["buffers"]) {
+        for (const auto &bufferJSON : segmentJSON["buffers"]) {
             BufferDesc buffer;
             buffer.name = bufferJSON["name"].asString();
             buffer.addr = bufferJSON["addr"].asUInt64();
@@ -757,7 +757,7 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
     } else if (desc->protocol == "nvlink" || desc->protocol == "nvlink_intra" ||
                desc->protocol == "hip" || desc->protocol == "maca" ||
                desc->protocol == "ubshmem") {
-        for (const auto& bufferJSON : segmentJSON["buffers"]) {
+        for (const auto &bufferJSON : segmentJSON["buffers"]) {
             BufferDesc buffer;
             buffer.name = bufferJSON["name"].asString();
             buffer.addr = bufferJSON["addr"].asUInt64();
@@ -775,18 +775,18 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
             desc->buffers.push_back(buffer);
         }
     } else if (desc->protocol == "nvmeof") {
-        for (const auto& bufferJSON : segmentJSON["buffers"]) {
+        for (const auto &bufferJSON : segmentJSON["buffers"]) {
             NVMeoFBufferDesc buffer;
             buffer.file_path = bufferJSON["file_path"].asString();
             buffer.length = bufferJSON["length"].asUInt64();
-            const Json::Value& local_path_map = bufferJSON["local_path_map"];
-            for (const auto& key : local_path_map.getMemberNames()) {
+            const Json::Value &local_path_map = bufferJSON["local_path_map"];
+            for (const auto &key : local_path_map.getMemberNames()) {
                 buffer.local_path_map[key] = local_path_map[key].asString();
             }
             desc->nvmeof_buffers.push_back(buffer);
         }
     } else if (desc->protocol == "ascend") {
-        for (const auto& deviceJSON : segmentJSON["devices"]) {
+        for (const auto &deviceJSON : segmentJSON["devices"]) {
             DeviceDesc device;
             device.name = deviceJSON["name"].asString();
             device.lid = deviceJSON["lid"].asUInt();
@@ -798,7 +798,7 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
             desc->devices.push_back(device);
         }
 
-        for (const auto& bufferJSON : segmentJSON["buffers"]) {
+        for (const auto &bufferJSON : segmentJSON["buffers"]) {
             BufferDesc buffer;
             buffer.name = bufferJSON["name"].asString();
             buffer.addr = bufferJSON["addr"].asUInt64();
@@ -823,7 +823,7 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
         desc->rank_info.devicePort = rankInfoJSON["devicePort"].asUInt64();
         desc->rank_info.pid = rankInfoJSON["pid"].asUInt64();
         if (rankInfoJSON.isMember("endpoints")) {
-            for (const auto& endpointJSON : rankInfoJSON["endpoints"]) {
+            for (const auto &endpointJSON : rankInfoJSON["endpoints"]) {
                 if (endpointJSON.isString()) {
                     desc->rank_info.endpoints.push_back(
                         endpointJSON.asString());
@@ -833,7 +833,7 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
     } else if (desc->protocol == "cxl") {
         desc->cxl_name = segmentJSON["cxl_name"].asString();
         desc->cxl_base_addr = segmentJSON["cxl_base_addr"].asUInt64();
-        for (const auto& bufferJSON : segmentJSON["buffers"]) {
+        for (const auto &bufferJSON : segmentJSON["buffers"]) {
             BufferDesc buffer;
             buffer.name = bufferJSON["name"].asString();
             buffer.offset = bufferJSON["offset"].asUInt64();
@@ -853,8 +853,8 @@ TransferMetadata::decodeSegmentDesc(Json::Value& segmentJSON,
     return desc;
 }
 
-int TransferMetadata::receivePeerMetadata(const Json::Value& peer_json,
-                                          Json::Value& local_json) {
+int TransferMetadata::receivePeerMetadata(const Json::Value &peer_json,
+                                          Json::Value &local_json) {
     // TODO: save to local cache
     // auto peer_desc = decodeSegmentDesc(peer_json,
     // peer_json["name"].asString());
@@ -873,7 +873,7 @@ int TransferMetadata::receivePeerMetadata(const Json::Value& peer_json,
 }
 
 std::shared_ptr<TransferMetadata::SegmentDesc> TransferMetadata::getSegmentDesc(
-    const std::string& segment_name) {
+    const std::string &segment_name) {
     Json::Value peer_json;
 
     if (p2p_handshake_mode_) {
@@ -933,12 +933,12 @@ std::shared_ptr<TransferMetadata::SegmentDesc> TransferMetadata::getSegmentDesc(
     return result;
 }
 
-int TransferMetadata::syncSegmentCache(const std::string& segment_name) {
+int TransferMetadata::syncSegmentCache(const std::string &segment_name) {
     // Collect segment names to sync first, then release lock before network I/O
     std::vector<std::string> names_to_sync;
     {
         RWSpinlock::ReadGuard guard(segment_lock_);
-        for (const auto& entry : segment_id_to_desc_map_) {
+        for (const auto &entry : segment_id_to_desc_map_) {
             if (entry.first == LOCAL_SEGMENT_ID) continue;
             if (!segment_name.empty() && entry.second->name != segment_name)
                 continue;
@@ -948,7 +948,7 @@ int TransferMetadata::syncSegmentCache(const std::string& segment_name) {
 
     // Fetch updates without holding lock (may involve network I/O)
     std::vector<std::pair<std::string, std::shared_ptr<SegmentDesc>>> updates;
-    for (const auto& name : names_to_sync) {
+    for (const auto &name : names_to_sync) {
         auto segment_desc = getSegmentDesc(name);
         if (segment_desc) {
             updates.emplace_back(name, segment_desc);
@@ -959,7 +959,7 @@ int TransferMetadata::syncSegmentCache(const std::string& segment_name) {
 
     // Apply updates with write lock
     RWSpinlock::WriteGuard guard(segment_lock_);
-    for (const auto& [name, desc] : updates) {
+    for (const auto &[name, desc] : updates) {
         auto it = segment_name_to_id_map_.find(name);
         if (it != segment_name_to_id_map_.end()) {
             segment_id_to_desc_map_[it->second] = desc;
@@ -969,7 +969,7 @@ int TransferMetadata::syncSegmentCache(const std::string& segment_name) {
 }
 
 std::shared_ptr<TransferMetadata::SegmentDesc>
-TransferMetadata::getSegmentDescByName(const std::string& segment_name,
+TransferMetadata::getSegmentDescByName(const std::string &segment_name,
                                        bool force_update) {
     if (globalConfig().metacache && !force_update) {
         RWSpinlock::ReadGuard guard(segment_lock_);
@@ -1035,7 +1035,7 @@ TransferMetadata::getSegmentDescByID(SegmentID segment_id, bool force_update) {
 }
 
 TransferMetadata::SegmentID TransferMetadata::getSegmentID(
-    const std::string& segment_name) {
+    const std::string &segment_name) {
     {
         RWSpinlock::ReadGuard guard(segment_lock_);
         if (segment_name_to_id_map_.count(segment_name))
@@ -1071,15 +1071,15 @@ int TransferMetadata::updateLocalSegmentDesc(uint64_t segment_id) {
 }
 
 int TransferMetadata::addLocalSegment(SegmentID segment_id,
-                                      const std::string& segment_name,
-                                      std::shared_ptr<SegmentDesc>&& desc) {
+                                      const std::string &segment_name,
+                                      std::shared_ptr<SegmentDesc> &&desc) {
     RWSpinlock::WriteGuard guard(segment_lock_);
     segment_id_to_desc_map_[segment_id] = desc;
     segment_name_to_id_map_[segment_name] = segment_id;
     return 0;
 }
 
-int TransferMetadata::removeLocalSegment(const std::string& segment_name) {
+int TransferMetadata::removeLocalSegment(const std::string &segment_name) {
     RWSpinlock::WriteGuard guard(segment_lock_);
     if (segment_name_to_id_map_.count(segment_name)) {
         int segment_id = segment_name_to_id_map_[segment_name];
@@ -1089,12 +1089,12 @@ int TransferMetadata::removeLocalSegment(const std::string& segment_name) {
     return 0;
 }
 
-int TransferMetadata::addLocalMemoryBuffer(const BufferDesc& buffer_desc,
+int TransferMetadata::addLocalMemoryBuffer(const BufferDesc &buffer_desc,
                                            bool update_metadata) {
     {
         RWSpinlock::WriteGuard guard(segment_lock_);
         auto new_segment_desc = std::make_shared<SegmentDesc>();
-        auto& segment_desc = segment_id_to_desc_map_[LOCAL_SEGMENT_ID];
+        auto &segment_desc = segment_id_to_desc_map_[LOCAL_SEGMENT_ID];
         *new_segment_desc = *segment_desc;
         segment_desc = new_segment_desc;
         segment_desc->buffers.push_back(buffer_desc);
@@ -1103,13 +1103,13 @@ int TransferMetadata::addLocalMemoryBuffer(const BufferDesc& buffer_desc,
     return 0;
 }
 
-int TransferMetadata::removeLocalMemoryBuffer(void* addr,
+int TransferMetadata::removeLocalMemoryBuffer(void *addr,
                                               bool update_metadata) {
     bool addr_exist = false;
     {
         RWSpinlock::WriteGuard guard(segment_lock_);
         auto new_segment_desc = std::make_shared<SegmentDesc>();
-        auto& segment_desc = segment_id_to_desc_map_[LOCAL_SEGMENT_ID];
+        auto &segment_desc = segment_id_to_desc_map_[LOCAL_SEGMENT_ID];
         *new_segment_desc = *segment_desc;
         segment_desc = new_segment_desc;
         for (auto iter = segment_desc->buffers.begin();
@@ -1133,21 +1133,21 @@ int TransferMetadata::removeLocalMemoryBuffer(void* addr,
     return ERR_ADDRESS_NOT_REGISTERED;
 }
 
-int TransferMetadata::addRpcMetaEntry(const std::string& server_name,
-                                      RpcMetaDesc& desc) {
+int TransferMetadata::addRpcMetaEntry(const std::string &server_name,
+                                      RpcMetaDesc &desc) {
     local_rpc_meta_ = desc;
 
     if (p2p_handshake_mode_) {
         handshake_plugin_->registerOnMetadataCallBack(
-            [this](const Json::Value& peer, Json::Value& local) -> int {
+            [this](const Json::Value &peer, Json::Value &local) -> int {
                 return receivePeerMetadata(peer, local);
             });
         handshake_plugin_->registerOnNotifyCallBack(
-            [this](const Json::Value& peer, Json::Value& local) -> int {
+            [this](const Json::Value &peer, Json::Value &local) -> int {
                 return receivePeerNotify(peer, local);
             });
         handshake_plugin_->registerOnProbeCallBack(
-            [this](const Json::Value& peer, Json::Value& local) -> int {
+            [this](const Json::Value &peer, Json::Value &local) -> int {
                 return receivePeerProbe(peer, local);
             });
 
@@ -1169,7 +1169,7 @@ int TransferMetadata::addRpcMetaEntry(const std::string& server_name,
     return 0;
 }
 
-int TransferMetadata::removeRpcMetaEntry(const std::string& server_name) {
+int TransferMetadata::removeRpcMetaEntry(const std::string &server_name) {
     if (p2p_handshake_mode_) {
         return 0;
     }
@@ -1180,7 +1180,7 @@ int TransferMetadata::removeRpcMetaEntry(const std::string& server_name) {
     return 0;
 }
 
-int TransferMetadata::rePublishRpcMetaEntry(const std::string& server_name) {
+int TransferMetadata::rePublishRpcMetaEntry(const std::string &server_name) {
     if (p2p_handshake_mode_) {
         return 0;
     }
@@ -1210,8 +1210,8 @@ int TransferMetadata::rePublishRpcMetaEntry(const std::string& server_name) {
     return 0;
 }
 
-int TransferMetadata::getRpcMetaEntry(const std::string& server_name,
-                                      RpcMetaDesc& desc) {
+int TransferMetadata::getRpcMetaEntry(const std::string &server_name,
+                                      RpcMetaDesc &desc) {
     {
         RWSpinlock::ReadGuard guard(rpc_meta_lock_);
         if (rpc_meta_map_.count(server_name)) {
@@ -1241,8 +1241,8 @@ int TransferMetadata::getRpcMetaEntry(const std::string& server_name,
 int TransferMetadata::startHandshakeDaemon(
     OnReceiveHandShake on_receive_handshake, uint16_t listen_port, int sockfd) {
     handshake_plugin_->registerOnConnectionCallBack(
-        [on_receive_handshake](const Json::Value& peer,
-                               Json::Value& local) -> int {
+        [on_receive_handshake](const Json::Value &peer,
+                               Json::Value &local) -> int {
             HandShakeDesc local_desc, peer_desc;
             TransferHandshakeUtil::decode(peer, peer_desc);
             if (on_receive_handshake) {
@@ -1253,11 +1253,11 @@ int TransferMetadata::startHandshakeDaemon(
             return 0;
         });
     handshake_plugin_->registerOnNotifyCallBack(
-        [this](const Json::Value& peer, Json::Value& local) -> int {
+        [this](const Json::Value &peer, Json::Value &local) -> int {
             return receivePeerNotify(peer, local);
         });
     handshake_plugin_->registerOnProbeCallBack(
-        [this](const Json::Value& peer, Json::Value& local) -> int {
+        [this](const Json::Value &peer, Json::Value &local) -> int {
             return receivePeerProbe(peer, local);
         });
 
@@ -1268,9 +1268,9 @@ int TransferMetadata::startHandshakeDaemon(
     return 0;
 }
 
-int TransferMetadata::sendHandshake(const std::string& peer_server_name,
-                                    const HandShakeDesc& local_desc,
-                                    HandShakeDesc& peer_desc) {
+int TransferMetadata::sendHandshake(const std::string &peer_server_name,
+                                    const HandShakeDesc &local_desc,
+                                    HandShakeDesc &peer_desc) {
     RpcMetaDesc peer_location;
     if (getRpcMetaEntry(peer_server_name, peer_location)) {
         return ERR_METADATA;
@@ -1289,9 +1289,9 @@ int TransferMetadata::sendHandshake(const std::string& peer_server_name,
     return 0;
 }
 
-int TransferMetadata::sendNotify(const std::string& peer_server_name,
-                                 const NotifyDesc& local_desc,
-                                 NotifyDesc& peer_desc) {
+int TransferMetadata::sendNotify(const std::string &peer_server_name,
+                                 const NotifyDesc &local_desc,
+                                 NotifyDesc &peer_desc) {
     RpcMetaDesc peer_location;
     if (getRpcMetaEntry(peer_server_name, peer_location)) {
         return ERR_METADATA;
@@ -1310,7 +1310,7 @@ int TransferMetadata::sendNotify(const std::string& peer_server_name,
     return 0;
 }
 
-int TransferMetadata::sendProbe(const std::string& peer_server_name) {
+int TransferMetadata::sendProbe(const std::string &peer_server_name) {
     RpcMetaDesc peer_location;
     if (getRpcMetaEntry(peer_server_name, peer_location)) {
         return ERR_METADATA;

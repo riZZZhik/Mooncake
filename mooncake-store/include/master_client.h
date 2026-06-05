@@ -1,24 +1,24 @@
 #pragma once
 
-#include <boost/functional/hash.hpp>
 #include <csignal>
-#include <cstdlib>
 #include <memory>
 #include <string>
 #include <type_traits>
-#include <variant>
 #include <vector>
+#include <variant>
+#include <cstdlib>
+#include <boost/functional/hash.hpp>
+#include <ylt/coro_rpc/coro_rpc_client.hpp>
 #include <ylt/coro_io/client_pool.hpp>
 #include <ylt/coro_io/ibverbs/ib_socket.hpp>
-#include <ylt/coro_rpc/coro_rpc_client.hpp>
 
 #include "client_metric.h"
-#include "master_metric_manager.h"
 #include "replica.h"
-#include "rpc_types.h"
 #include "segment.h"
-#include "task_manager.h"
 #include "types.h"
+#include "rpc_types.h"
+#include "master_metric_manager.h"
+#include "task_manager.h"
 
 namespace mooncake {
 

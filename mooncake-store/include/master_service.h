@@ -23,16 +23,16 @@
 
 #include "allocation_strategy.h"
 #include "count_min_sketch.h"
-#include "ha/ha_types.h"
-#include "ha/snapshot/object/snapshot_object_store.h"
-#include "master_config.h"
 #include "master_metric_manager.h"
 #include "mutex.h"
-#include "replica.h"
-#include "rpc_types.h"
 #include "segment.h"
-#include "task_manager.h"
 #include "types.h"
+#include "master_config.h"
+#include "rpc_types.h"
+#include "replica.h"
+#include "ha/ha_types.h"
+#include "ha/snapshot/object/snapshot_object_store.h"
+#include "task_manager.h"
 
 namespace mooncake {
 namespace ha {
