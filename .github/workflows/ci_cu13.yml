@@ -66,7 +66,9 @@ jobs:
         cd build
         cmake -G Ninja .. \
           -DUSE_ETCD=ON \
+          -DSTORE_USE_ETCD=ON \
           -DUSE_REDIS=ON \
+          -DSTORE_USE_REDIS=ON \
           -DUSE_HTTP=ON \
           -DWITH_STORE=ON \
           -DWITH_P2P_STORE=ON \
