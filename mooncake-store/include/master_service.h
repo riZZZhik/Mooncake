@@ -1364,6 +1364,14 @@ class MasterService {
         const std::chrono::system_clock::time_point& now);
 
     /**
+     * @brief Discard processing keys whose authoring client has been expired.
+     */
+    void DiscardClientProcessingReplicas(
+        MetadataShardAccessorRW& shard,
+        const std::unordered_set<UUID, boost::hash<UUID>>& expired_clients,
+        const std::chrono::system_clock::time_point& now);
+
+    /**
      * @brief Helper to release space of expired discarded replicas.
      * @return Number of released objects that have memory replicas
      */

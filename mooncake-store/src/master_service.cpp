@@ -4779,6 +4779,62 @@ void MasterService::DiscardExpiredProcessingReplicas(
     }
 }
 
+void MasterService::DiscardClientProcessingReplicas(
+    MetadataShardAccessorRW& shard,
+    const std::unordered_set<UUID, boost::hash<UUID>>& expired_clients,
+    const std::chrono::system_clock::time_point& now) {
+    if (expired_clients.empty()) {
+        return;
+    }
+
+    std::list<DiscardedReplicas> discarded_replicas;
+
+    for (auto tenant_it = shard->tenants.begin();
+         tenant_it != shard->tenants.end();) {
+        auto& tenant_state = tenant_it->second;
+
+        for (auto key_it = tenant_state.processing_keys.begin();
+             key_it != tenant_state.processing_keys.end();) {
+            auto it = tenant_state.metadata.find(*key_it);
+            if (it == tenant_state.metadata.end()) {
+                key_it = tenant_state.processing_keys.erase(key_it);
+                continue;
+            }
+
+            auto& metadata = it->second;
+            if (expired_clients.find(metadata.client_id) ==
+                expired_clients.end()) {
+                ++key_it;
+                continue;
+            }
+
+            const auto ttl =
+                metadata.put_start_time + put_start_release_timeout_sec_;
+            auto replicas = metadata.PopReplicas(&Replica::fn_is_processing);
+            if (!replicas.empty()) {
+                discarded_replicas.emplace_back(std::move(replicas),
+                                                std::max(ttl, now));
+            }
+            if (!metadata.IsValid()) {
+                EraseMetadata(tenant_state, it, tenant_it->first);
+            }
+            key_it = tenant_state.processing_keys.erase(key_it);
+        }
+
+        if (tenant_state.Empty()) {
+            tenant_it = shard->tenants.erase(tenant_it);
+        } else {
+            ++tenant_it;
+        }
+    }
+
+    if (!discarded_replicas.empty()) {
+        std::lock_guard lock(discarded_replicas_mutex_);
+        discarded_replicas_.splice(discarded_replicas_.end(),
+                                   std::move(discarded_replicas));
+    }
+}
+
 uint64_t MasterService::ReleaseExpiredDiscardedReplicas(
     const std::chrono::system_clock::time_point& now) {
     uint64_t released_cnt = 0;
@@ -6521,6 +6577,20 @@ void MasterService::ClientMonitorFunc() {
             // even if no memory segments were unmounted. This is necessary
             // to clean up local_disk replicas whose owner client has expired.
             ClearInvalidHandles();
+
+            // Discard in-flight PutStart metadata authored by the expired
+            // clients so retries by fresh clients are not blocked behind
+            // orphan records.
+            {
+                std::unordered_set<UUID, boost::hash<UUID>> expired_set(
+                    expired_clients.begin(), expired_clients.end());
+                const auto now_sys = std::chrono::system_clock::now();
+                for (size_t i = 0; i < kNumShards; i++) {
+                    MetadataShardAccessorRW shard(this, i);
+                    DiscardClientProcessingReplicas(shard, expired_set,
+                                                    now_sys);
+                }
+            }
 
             // Commit unmount of memory segments and clean up local_disk
             // segments for expired clients. Both require the exclusive

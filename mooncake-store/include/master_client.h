@@ -57,18 +57,15 @@ class MasterClient {
         : client_id_(client_id),
           tenant_id_(NormalizeTenantId(std::move(tenant_id))),
           metrics_(metrics) {
-        coro_io::client_pool<coro_rpc::coro_rpc_client>::pool_config
-            pool_conf{};
-
         // Disable alive_detect to prevent stale reconnection logs after HA
         // failover. Old client_pool objects remain in client_pools_ map and
         // would otherwise continue probing failed addresses indefinitely. See
         // PR #1642.
-        pool_conf.host_alive_detect_duration = std::chrono::seconds(0);
+        pool_conf_.host_alive_detect_duration = std::chrono::seconds(0);
         const char* value = std::getenv("MC_RPC_PROTOCOL");
         if (value && std::string_view(value) == "rdma") {
             detail::MaybeEnableRdmaSocketConfig(
-                pool_conf.client_config.socket_config);
+                pool_conf_.client_config.socket_config);
         }
 
         // Per-request timeout for all client->master RPCs. coro_rpc's
@@ -87,7 +84,7 @@ class MasterClient {
         }
         client_pools_ =
             std::make_shared<coro_io::client_pools<coro_rpc::coro_rpc_client>>(
-                pool_conf);
+                pool_conf_);
     }
     ~MasterClient();
 
@@ -704,6 +701,9 @@ class MasterClient {
 
     // Metrics for tracking RPC operations
     MasterClientMetric* metrics_;
+    // Cached pool configuration so Connect() can rebuild client_pools_ with
+    // the same settings when the master address is unchanged.
+    coro_io::client_pool<coro_rpc::coro_rpc_client>::pool_config pool_conf_{};
     std::shared_ptr<coro_io::client_pools<coro_rpc::coro_rpc_client>>
         client_pools_;
 
