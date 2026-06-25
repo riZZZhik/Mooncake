@@ -1,25 +1,26 @@
 #include "master_service.h"
 
-#include <thread>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include <boost/algorithm/string.hpp>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <random>
+#include <regex>
 #include <shared_mutex>
 #include <sstream>
-#include <regex>
+#include <thread>
 #include <unordered_set>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <fcntl.h>
 #include <ylt/util/tl/expected.hpp>
-#include <boost/algorithm/string.hpp>
 
+#include "common.h"
 #include "http_metadata_server.h"
 #include "master_metric_manager.h"
-#include "common.h"
 #include "segment.h"
 #ifdef USE_HTTP
 #include "transfer_metadata_plugin.h"
@@ -34,12 +35,12 @@
 #include "ha/snapshot/catalog/backends/embedded/embedded_snapshot_catalog_store.h"
 #include "ha/snapshot/catalog/backends/redis/redis_snapshot_catalog_store.h"
 #include "ha/snapshot/object/snapshot_object_store.h"
-#include "types.h"
-#include "serialize/serializer.hpp"
 #include "ha/snapshot/snapshot_logger.h"
-#include "utils/zstd_util.h"
-#include "utils/file_util.h"
+#include "serialize/serializer.hpp"
+#include "types.h"
 #include "utils.h"
+#include "utils/file_util.h"
+#include "utils/zstd_util.h"
 
 namespace mooncake {
 
@@ -2618,8 +2619,7 @@ auto MasterService::PutStart(const UUID& client_id, const std::string& key,
                     })) {
                     MasterMetricManager::instance()
                         .inc_put_start_already_exists();
-                    VLOG(1) << "key=" << key
-                            << ", info=object_already_exists"
+                    VLOG(1) << "key=" << key << ", info=object_already_exists"
                             << ", reason=completed_replica";
                     return tl::make_unexpected(
                         ErrorCode::OBJECT_ALREADY_EXISTS);
@@ -2643,9 +2643,9 @@ auto MasterService::PutStart(const UUID& client_id, const std::string& key,
                         now) {
                         MasterMetricManager::instance()
                             .inc_put_start_already_exists();
-                        VLOG(1) << "key=" << key
-                                << ", info=object_already_exists"
-                                << ", reason=processing_window";
+                        VLOG(1)
+                            << "key=" << key << ", info=object_already_exists"
+                            << ", reason=processing_window";
                         return tl::make_unexpected(
                             ErrorCode::OBJECT_ALREADY_EXISTS);
                     }
