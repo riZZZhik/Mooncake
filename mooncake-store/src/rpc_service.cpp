@@ -360,8 +360,9 @@ WrappedMasterService::BatchPutStart(const UUID& client_id,
     }
 
     if (no_available_handle_count > 0) {
-        LOG(WARNING) << "BatchPutStart failed for " << no_available_handle_count
-                     << " keys" << PUT_NO_SPACE_HELPER_STR;
+        LOG_EVERY_N(WARNING, 100)
+            << "BatchPutStart failed for " << no_available_handle_count
+            << " keys" << PUT_NO_SPACE_HELPER_STR;
     }
 
     if (failure_count == total_keys) {
@@ -399,8 +400,13 @@ std::vector<tl::expected<void, ErrorCode>> WrappedMasterService::BatchPutEnd(
         if (!results[i].has_value()) {
             failure_count++;
             auto error = results[i].error();
-            LOG(ERROR) << "BatchPutEnd failed for key[" << i << "] '" << keys[i]
-                       << "': " << toString(error);
+            if (error == ErrorCode::OBJECT_NOT_FOUND) {
+                VLOG(1) << "BatchPutEnd failed for key[" << i << "] '"
+                        << keys[i] << "': " << toString(error);
+            } else {
+                LOG(ERROR) << "BatchPutEnd failed for key[" << i << "] '"
+                           << keys[i] << "': " << toString(error);
+            }
         }
     }
 
@@ -439,8 +445,13 @@ std::vector<tl::expected<void, ErrorCode>> WrappedMasterService::BatchPutRevoke(
         if (!results[i].has_value()) {
             failure_count++;
             auto error = results[i].error();
-            LOG(ERROR) << "BatchPutRevoke failed for key[" << i << "] '"
-                       << keys[i] << "': " << toString(error);
+            if (error == ErrorCode::OBJECT_NOT_FOUND) {
+                VLOG(1) << "BatchPutRevoke failed for key[" << i << "] '"
+                        << keys[i] << "': " << toString(error);
+            } else {
+                LOG(ERROR) << "BatchPutRevoke failed for key[" << i << "] '"
+                           << keys[i] << "': " << toString(error);
+            }
         }
     }
 
