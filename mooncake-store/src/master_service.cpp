@@ -2727,7 +2727,7 @@ auto MasterService::PutEnd(const UUID& client_id, const std::string& key,
     const auto object_id = MakeObjectIdentity(key, tenant_id);
     MetadataAccessorRW accessor(this, object_id);
     if (!accessor.Exists()) {
-        LOG(ERROR) << "key=" << key << ", error=object_not_found";
+        VLOG(1) << "key=" << key << ", error=object_not_found";
         return tl::make_unexpected(ErrorCode::OBJECT_NOT_FOUND);
     }
 
@@ -2871,7 +2871,7 @@ auto MasterService::PutRevoke(const UUID& client_id, const std::string& key,
     const auto object_id = MakeObjectIdentity(key, tenant_id);
     MetadataAccessorRW accessor(this, object_id);
     if (!accessor.Exists()) {
-        LOG(INFO) << "key=" << key << ", info=object_not_found";
+        VLOG(1) << "key=" << key << ", info=object_not_found";
         return tl::make_unexpected(ErrorCode::OBJECT_NOT_FOUND);
     }
 
