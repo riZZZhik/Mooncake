@@ -339,6 +339,9 @@ MasterMetricManager::MasterMetricManager()
           "master_put_start_discarded_staging_size",
           "Total size of memory replicas in discarded but not yet released "
           "PutStart operations"),
+      put_start_already_exists_("master_put_start_already_exists_total",
+                                "Total PutStart/UpsertStart calls that "
+                                "returned OBJECT_ALREADY_EXISTS"),
 
       // Promotion-on-hit Metrics
       promotion_in_flight_metric_(
@@ -624,6 +627,7 @@ void MasterMetricManager::update_metrics_for_zero_output() {
     // Update PutStart Discard Metrics
     put_start_discard_cnt_.inc(0);
     put_start_release_cnt_.inc(0);
+    put_start_already_exists_.inc(0);
 
     // Update Histogram (use observe(0) to mark as changed)
     value_size_distribution_.observe(0);
@@ -1158,6 +1162,10 @@ void MasterMetricManager::inc_put_start_release_cnt(int64_t count,
     put_start_discarded_staging_size_.dec(size);
 }
 
+void MasterMetricManager::inc_put_start_already_exists(int64_t val) {
+    put_start_already_exists_.inc(val);
+}
+
 // --- Promotion-on-hit Metrics ---
 void MasterMetricManager::inc_promotion_in_flight(int64_t val) {
     promotion_in_flight_metric_.inc(val);
@@ -1581,6 +1589,10 @@ int64_t MasterMetricManager::get_put_start_discarded_staging_size() {
     return put_start_discarded_staging_size_.value();
 }
 
+int64_t MasterMetricManager::get_put_start_already_exists() {
+    return put_start_already_exists_.value();
+}
+
 // --- Promotion-on-hit Metrics Getters ---
 int64_t MasterMetricManager::get_promotion_in_flight() {
     return promotion_in_flight_metric_.value();
@@ -1952,6 +1964,7 @@ std::string MasterMetricManager::serialize_metrics() {
     serialize_metric(put_start_discard_cnt_);
     serialize_metric(put_start_release_cnt_);
     serialize_metric(put_start_discarded_staging_size_);
+    serialize_metric(put_start_already_exists_);
 
     // Serialize Promotion-on-hit Metrics
     serialize_metric(promotion_in_flight_metric_);
@@ -2606,7 +2619,8 @@ std::string MasterMetricManager::get_summary_string(
     ss << " | Discard: "
        << "Released/Total=" << put_start_release_cnt << "/"
        << put_start_discard_cnt << ", StagingSize="
-       << byte_size_to_string(put_start_discarded_staging_size);
+       << byte_size_to_string(put_start_discarded_staging_size)
+       << ", AlreadyExists=" << put_start_already_exists_.value();
 
     // Promotion-on-hit summary (counters are cumulative, not deltas; the
     // gauge is current-state).

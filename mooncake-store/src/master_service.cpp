@@ -3356,11 +3356,15 @@ auto MasterService::AllocateAndInsertMetadata(
     -> tl::expected<std::vector<Replica::Descriptor>, ErrorCode> {
     auto& tenant_state = shard->tenants[tenant_id];
     if (tenant_state.metadata.contains(key)) {
-        LOG(INFO) << "key=" << key << ", info=object_already_exists";
+        MasterMetricManager::instance().inc_put_start_already_exists();
+        VLOG(1) << "key=" << key << ", info=object_already_exists"
+                << ", reason=alloc_metadata_contains";
         return tl::make_unexpected(ErrorCode::OBJECT_ALREADY_EXISTS);
     }
     if (GetGroupRoute(tenant_id, key).has_value()) {
-        LOG(INFO) << "key=" << key << ", info=object_already_exists";
+        MasterMetricManager::instance().inc_put_start_already_exists();
+        VLOG(1) << "key=" << key << ", info=object_already_exists"
+                << ", reason=alloc_group_route";
         return tl::make_unexpected(ErrorCode::OBJECT_ALREADY_EXISTS);
     }
 
@@ -3567,7 +3571,9 @@ auto MasterService::AllocateAndInsertMetadata(
                               config.with_soft_pin, config.with_hard_pin,
                               config.data_type, group_id, tenant_id, key));
     if (!inserted) {
-        LOG(INFO) << "key=" << key << ", info=object_already_exists";
+        MasterMetricManager::instance().inc_put_start_already_exists();
+        VLOG(1) << "key=" << key << ", info=object_already_exists"
+                << ", reason=alloc_emplace_race";
         abort_reserved_quota();
         return tl::make_unexpected(ErrorCode::OBJECT_ALREADY_EXISTS);
     }
@@ -3655,7 +3661,6 @@ auto MasterService::PutStart(const UUID& client_id, const std::string& key,
         auto now = std::chrono::system_clock::now();
         std::optional<size_t> retry_shard_idx;
         {
-            auto alive_clients = getAliveClientsSnapshot();
             std::shared_lock<std::shared_mutex> shared_lock(snapshot_mutex_);
             const size_t lookup_shard_idx =
                 getMetadataShardIndex(object_id.tenant_id, object_id.user_key);
@@ -3664,6 +3669,43 @@ auto MasterService::PutStart(const UUID& client_id, const std::string& key,
 
             auto it = tenant_state.metadata.find(key);
             if (it != tenant_state.metadata.end()) {
+                // Fast path for the common "key is already fully written"
+                // case, which avoids copying the alive-clients set on every
+                // duplicate PutStart. Only taken when no replica can possibly
+                // be classified stale without consulting alive_clients, i.e.
+                // every COMPLETE replica is a memory/nof replica with a still
+                // valid backing handle. In that situation
+                // BuildStaleHandleCleanupPlan would produce an empty
+                // removed_ids, so the slow path below performs no HA
+                // persistence and no cleanup, and falls through to
+                // HasReplica(fn_is_completed) -> OBJECT_ALREADY_EXISTS. Any
+                // COMPLETE local-disk replica defers to the slow path,
+                // because its freshness depends on alive_clients.
+                const auto& all_replicas = it->second.GetAllReplicas();
+                bool has_completed = false;
+                bool cleanup_may_remove = false;
+                for (const auto& replica : all_replicas) {
+                    if (!replica.is_completed()) continue;
+                    has_completed = true;
+                    if (replica.is_local_disk_replica() ||
+                        replica.has_invalid_mem_handle() ||
+                        replica.has_invalid_nof_handle()) {
+                        cleanup_may_remove = true;
+                        break;
+                    }
+                }
+                if (has_completed && !cleanup_may_remove) {
+                    MasterMetricManager::instance()
+                        .inc_put_start_already_exists();
+                    VLOG(1) << "key=" << key << ", info=object_already_exists"
+                            << ", reason=completed_replica";
+                    return tl::make_unexpected(
+                        ErrorCode::OBJECT_ALREADY_EXISTS);
+                }
+
+                // Slow path: alive_clients is required to classify stale
+                // handles.
+                auto alive_clients = getAliveClientsSnapshot();
                 auto cleanup_plan =
                     BuildStaleHandleCleanupPlan(it->second, alive_clients);
                 if (!cleanup_plan.removed_ids.empty()) {
@@ -3689,8 +3731,11 @@ auto MasterService::PutStart(const UUID& client_id, const std::string& key,
                         metadata.put_start_time +
                                 put_start_discard_timeout_sec_ >=
                             now) {
-                        LOG(INFO)
-                            << "key=" << key << ", info=object_already_exists";
+                        MasterMetricManager::instance()
+                            .inc_put_start_already_exists();
+                        VLOG(1)
+                            << "key=" << key << ", info=object_already_exists"
+                            << ", reason=completed_or_processing_window";
                         return tl::make_unexpected(
                             ErrorCode::OBJECT_ALREADY_EXISTS);
                     }
@@ -3741,7 +3786,9 @@ auto MasterService::PutStart(const UUID& client_id, const std::string& key,
         if (GetGroupRoute(object_id.tenant_id, object_id.user_key)
                 .has_value() ||
             retry_tenant_state.metadata.contains(key)) {
-            LOG(INFO) << "key=" << key << ", info=object_already_exists";
+            MasterMetricManager::instance().inc_put_start_already_exists();
+            VLOG(1) << "key=" << key << ", info=object_already_exists"
+                    << ", reason=retry_shard_duplicate";
             return tl::make_unexpected(ErrorCode::OBJECT_ALREADY_EXISTS);
         }
         return AllocateAndInsertMetadata(shard, client_id, key, slice_length,
@@ -3777,7 +3824,7 @@ auto MasterService::PutEnd(const UUID& client_id, const ObjectMeta& object_meta,
     const auto object_id = MakeObjectIdentityForRequest(key, tenant_id);
     MetadataAccessorRW accessor(this, object_id);
     if (!accessor.Exists()) {
-        LOG(ERROR) << "key=" << key << ", error=object_not_found";
+        VLOG(1) << "key=" << key << ", error=object_not_found";
         return tl::make_unexpected(ErrorCode::OBJECT_NOT_FOUND);
     }
 
@@ -4027,7 +4074,7 @@ auto MasterService::PutRevoke(const UUID& client_id, const std::string& key,
     const auto object_id = MakeObjectIdentityForRequest(key, tenant_id);
     MetadataAccessorRW accessor(this, object_id);
     if (!accessor.Exists()) {
-        LOG(INFO) << "key=" << key << ", info=object_not_found";
+        VLOG(1) << "key=" << key << ", info=object_not_found";
         return tl::make_unexpected(ErrorCode::OBJECT_NOT_FOUND);
     }
 
@@ -4500,7 +4547,9 @@ auto MasterService::UpsertStart(const UUID& client_id, const std::string& key,
             GetGroupRoute(object_id.tenant_id, object_id.user_key);
         if (current_route.has_value() ||
             retry_tenant_state.metadata.contains(key)) {
-            LOG(INFO) << "key=" << key << ", info=object_already_exists";
+            MasterMetricManager::instance().inc_put_start_already_exists();
+            VLOG(1) << "key=" << key << ", info=object_already_exists"
+                    << ", reason=upsert_retry_shard_duplicate";
             return tl::make_unexpected(ErrorCode::OBJECT_ALREADY_EXISTS);
         }
         return AllocateAndInsertMetadata(shard, client_id, key, slice_length,
