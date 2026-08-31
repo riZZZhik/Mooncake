@@ -4032,11 +4032,15 @@ auto MasterService::AllocateAndInsertMetadata(
     const auto deadline_to_index = committed_soft_pin_timeout;
     auto& tenant_state = GetOrCreateTenantState(shard.get(), tenant_id);
     if (tenant_state.metadata.contains(key)) {
-        LOG(INFO) << "key=" << key << ", info=object_already_exists";
+        MasterMetricManager::instance().inc_put_start_already_exists();
+        VLOG(1) << "key=" << key << ", info=object_already_exists"
+                << ", reason=alloc_metadata_contains";
         return tl::make_unexpected(ErrorCode::OBJECT_ALREADY_EXISTS);
     }
     if (GetGroupRoute(tenant_id, key).has_value()) {
-        LOG(INFO) << "key=" << key << ", info=object_already_exists";
+        MasterMetricManager::instance().inc_put_start_already_exists();
+        VLOG(1) << "key=" << key << ", info=object_already_exists"
+                << ", reason=alloc_group_route";
         return tl::make_unexpected(ErrorCode::OBJECT_ALREADY_EXISTS);
     }
 
@@ -4261,7 +4265,9 @@ auto MasterService::AllocateAndInsertMetadata(
                               tenant_id, key));
     if (!inserted) {
         FreeDfsReplicas(key, replicas);
-        LOG(INFO) << "key=" << key << ", info=object_already_exists";
+        MasterMetricManager::instance().inc_put_start_already_exists();
+        VLOG(1) << "key=" << key << ", info=object_already_exists"
+                << ", reason=alloc_emplace_race";
         refund_pending_quota();
         return tl::make_unexpected(ErrorCode::OBJECT_ALREADY_EXISTS);
     }
@@ -4425,8 +4431,11 @@ auto MasterService::PutStart(const UUID& client_id, const std::string& key,
                         metadata.put_start_time +
                                 put_start_discard_timeout_sec_ >=
                             now) {
-                        LOG(INFO)
-                            << "key=" << key << ", info=object_already_exists";
+                        MasterMetricManager::instance()
+                            .inc_put_start_already_exists();
+                        VLOG(1)
+                            << "key=" << key << ", info=object_already_exists"
+                            << ", reason=processing_window";
                         return tl::make_unexpected(
                             ErrorCode::OBJECT_ALREADY_EXISTS);
                     }
@@ -4480,7 +4489,9 @@ auto MasterService::PutStart(const UUID& client_id, const std::string& key,
         if (GetGroupRoute(object_id.tenant_id, object_id.user_key)
                 .has_value() ||
             retry_tenant_state.metadata.contains(key)) {
-            LOG(INFO) << "key=" << key << ", info=object_already_exists";
+            MasterMetricManager::instance().inc_put_start_already_exists();
+            VLOG(1) << "key=" << key << ", info=object_already_exists"
+                    << ", reason=retry_shard_duplicate";
             return tl::make_unexpected(ErrorCode::OBJECT_ALREADY_EXISTS);
         }
         return AllocateAndInsertMetadata(
@@ -4514,7 +4525,7 @@ auto MasterService::PutEnd(const UUID& client_id, const ObjectMeta& object_meta,
     const auto object_id = MakeObjectIdentityForRequest(key, tenant_id);
     MetadataAccessorRW accessor(this, object_id);
     if (!accessor.Exists()) {
-        LOG(ERROR) << "key=" << key << ", error=object_not_found";
+        VLOG(1) << "key=" << key << ", error=object_not_found";
         return tl::make_unexpected(ErrorCode::OBJECT_NOT_FOUND);
     }
 
@@ -4781,7 +4792,7 @@ auto MasterService::PutRevoke(const UUID& client_id, const std::string& key,
     const auto object_id = MakeObjectIdentityForRequest(key, tenant_id);
     MetadataAccessorRW accessor(this, object_id);
     if (!accessor.Exists()) {
-        LOG(INFO) << "key=" << key << ", info=object_not_found";
+        VLOG(1) << "key=" << key << ", info=object_not_found";
         return tl::make_unexpected(ErrorCode::OBJECT_NOT_FOUND);
     }
 
@@ -5386,7 +5397,9 @@ auto MasterService::UpsertStart(const UUID& client_id, const std::string& key,
             GetGroupRoute(object_id.tenant_id, object_id.user_key);
         if (current_route.has_value() ||
             retry_tenant_state.metadata.contains(key)) {
-            LOG(INFO) << "key=" << key << ", info=object_already_exists";
+            MasterMetricManager::instance().inc_put_start_already_exists();
+            VLOG(1) << "key=" << key << ", info=object_already_exists"
+                    << ", reason=upsert_retry_shard_duplicate";
             return tl::make_unexpected(ErrorCode::OBJECT_ALREADY_EXISTS);
         }
         return AllocateAndInsertMetadata(

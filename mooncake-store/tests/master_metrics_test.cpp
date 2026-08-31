@@ -133,6 +133,7 @@ TEST_F(MasterMetricsTest, InitialStatusTest) {
     ASSERT_EQ(metrics.get_put_start_discard_cnt(), 0);
     ASSERT_EQ(metrics.get_put_start_release_cnt(), 0);
     ASSERT_EQ(metrics.get_put_start_discarded_staging_size(), 0);
+    ASSERT_EQ(metrics.get_put_start_already_exists(), 0);
 }
 
 TEST_F(MasterMetricsTest, BasicRequestTest) {
