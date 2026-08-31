@@ -304,11 +304,13 @@ class MasterMetricManager {
     // PutStart Discard Metrics
     void inc_put_start_discard_cnt(int64_t count, int64_t size);
     void inc_put_start_release_cnt(int64_t count, int64_t size);
+    void inc_put_start_already_exists(int64_t val = 1);
 
     // PutStart Discard Metrics Getters
     int64_t get_put_start_discard_cnt();
     int64_t get_put_start_release_cnt();
     int64_t get_put_start_discarded_staging_size();
+    int64_t get_put_start_already_exists();
 
     // Promotion-on-hit Metrics
     void inc_promotion_in_flight(int64_t val = 1);
@@ -700,6 +702,7 @@ class MasterMetricManager {
     ylt::metric::counter_t put_start_discard_cnt_;
     ylt::metric::counter_t put_start_release_cnt_;
     ylt::metric::gauge_t put_start_discarded_staging_size_;
+    ylt::metric::counter_t put_start_already_exists_;
 
     // Promotion-on-hit Metrics
     ylt::metric::gauge_t promotion_in_flight_metric_;
