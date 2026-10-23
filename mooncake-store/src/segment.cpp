@@ -301,7 +301,23 @@ ErrorCode ScopedSegmentAccess::ReMountSegment(
             LOG(WARNING) << "segment_name=" << segment.name
                          << ", warn=invalid_params";
         } else if (err == ErrorCode::SEGMENT_ALREADY_EXISTS) {
-            // Segment already exists, no need to remount.
+            // Segment already exists, no need to remount. Backfill
+            // protocol/host_id if the authoritative entry lost them (snapshot
+            // written before these fields were serialized) so that newly
+            // written snapshots carry the real values.
+            auto mounted_it =
+                segment_manager_->mounted_segments_.find(segment.id);
+            if (mounted_it != segment_manager_->mounted_segments_.end()) {
+                auto& authoritative = mounted_it->second.segment;
+                if (authoritative.protocol.empty()) {
+                    authoritative.protocol = segment.protocol;
+                }
+                if (authoritative.host_id.empty() && !segment.host_id.empty()) {
+                    authoritative.host_id = segment.host_id;
+                    AddHostSegment(segment_manager_->segments_by_host_,
+                                   authoritative);
+                }
+            }
             LOG(WARNING) << "segment_name=" << segment.name
                          << ", warn=segment_already_exists";
         } else if (err != ErrorCode::OK) {
@@ -326,13 +342,39 @@ ErrorCode ScopedSegmentAccess::ValidateRemountSegment(
                        std::find(owner->second.begin(), owner->second.end(),
                                  segment.id) != owner->second.end();
     const auto& authoritative = mounted->second.segment;
+    // An empty protocol/host_id in the authoritative entry means the segment
+    // was restored from a snapshot written before these fields were
+    // serialized. Accept any value from the live client in that case.
+    const bool protocol_matches = authoritative.protocol.empty() ||
+                                  authoritative.protocol == segment.protocol;
+    const bool host_id_matches = authoritative.host_id.empty() ||
+                                 authoritative.host_id == segment.host_id;
     if (!owned || authoritative.id != segment.id ||
         authoritative.name != segment.name ||
         authoritative.base != segment.base ||
         authoritative.size != segment.size ||
-        authoritative.te_endpoint != segment.te_endpoint ||
-        authoritative.protocol != segment.protocol ||
-        authoritative.host_id != segment.host_id) {
+        authoritative.te_endpoint != segment.te_endpoint || !protocol_matches ||
+        !host_id_matches) {
+        LOG(ERROR) << "segment_name=" << segment.name
+                   << ", client_id=" << client_id
+                   << ", error=remount_validation_failed"
+                   << ", owned=" << owned
+                   << ", id_match=" << (authoritative.id == segment.id)
+                   << ", name_match=" << (authoritative.name == segment.name)
+                   << ", base_match=" << (authoritative.base == segment.base)
+                   << ", size_match=" << (authoritative.size == segment.size)
+                   << ", te_endpoint_match="
+                   << (authoritative.te_endpoint == segment.te_endpoint)
+                   << ", protocol_match=" << protocol_matches
+                   << ", host_id_match=" << host_id_matches
+                   << ", authoritative_telemetry={name=" << authoritative.name
+                   << ", te_endpoint=" << authoritative.te_endpoint
+                   << ", protocol=" << authoritative.protocol
+                   << ", host_id=" << authoritative.host_id
+                   << "}, incoming={name=" << segment.name
+                   << ", te_endpoint=" << segment.te_endpoint
+                   << ", protocol=" << segment.protocol
+                   << ", host_id=" << segment.host_id << "}";
         return ErrorCode::INVALID_PARAMS;
     }
     return ErrorCode::OK;
